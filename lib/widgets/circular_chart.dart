@@ -20,7 +20,12 @@ class CircularChart extends StatelessWidget {
 
 class ChartPainter extends CustomPainter {
   final Map<String, double> quantitiesInPercentage;
-  final colors = [Colors.red, Colors.green, Colors.blue, Colors.yellow];
+  final List<Color> colors = [
+    Colors.orange, // 첫 번째 카테고리 색상
+    Colors.purple, // 두 번째 카테고리 색상
+    Colors.cyan,   // 세 번째 카테고리 색상
+    Colors.pink    // 네 번째 카테고리 색상
+  ];
 
   ChartPainter(this.quantitiesInPercentage);
 
@@ -28,18 +33,31 @@ class ChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     double startAngle = 0.0;
     int i = 0;
+
+    // 데이터를 순회하며 각 섹션을 그리기
     quantitiesInPercentage.forEach((option, percentage) {
+      // 각 데이터에 대응하는 색상을 선택
+      final colorIndex = i % colors.length;
       final paint = Paint()
-        ..color = colors[i % colors.length]
+        ..color = colors[colorIndex] // 올바른 색상 설정
         ..style = PaintingStyle.fill;
-      final sweepAngle = percentage * 2 * 3.1415; // 비율에 따라 각도 설정
+
+      // 비율에 따라 각도 설정
+      final sweepAngle = percentage * 2 * 3.1415;
+
+      // 원형 차트 그리기
       canvas.drawArc(
-        Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: size.width / 2),
+        Rect.fromCircle(
+          center: Offset(size.width / 2, size.height / 2),
+          radius: size.width / 2,
+        ),
         startAngle,
         sweepAngle,
         true,
         paint,
       );
+
+      // 다음 섹션을 위한 시작 각도 업데이트
       startAngle += sweepAngle;
       i++;
     });

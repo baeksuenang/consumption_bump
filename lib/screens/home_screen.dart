@@ -6,13 +6,21 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chartProvider = Provider.of<ChartProvider>(context);
+    final colors = [Colors.red, Colors.green, Colors.blue, Colors.yellow]; // 각 항목에 사용할 색상 배열
+    int colorIndex = 0; // 색상 인덱스 초기화
+
     final chartData = chartProvider.getQuantitiesInPercentage().entries.map((entry) {
+      final color = charts.ColorUtil.fromDartColor(colors[colorIndex % colors.length]); // 순환 색상 적용
+      colorIndex++; // 다음 색상으로 넘어가기
       return PieChartData(
         label: entry.key,
         value: entry.value,
-        color: charts.ColorUtil.fromDartColor(Colors.blue), // 원하는 색상 적용
+        color: color,
       );
     }).toList();
+
+    // 나머지 코드 그대로 유지
+
 
     return Scaffold(
       appBar: AppBar(
@@ -115,27 +123,42 @@ class HomeScreen extends StatelessWidget {
 
   // 미션 추가 팝업을 표시하는 함수
   void showMissionPopup(BuildContext context, String missionName) {
+    // 미션 리스트 정의 (예시)
+    List<String> missions;
+    if (missionName == '식사') {
+      missions = ['식사미션 1', '식사미션 2', '식사미션 3'];
+    } else if (missionName == '의류') {
+      missions = ['의류미션 1', '의류미션 2'];
+    } else if (missionName == '취미') {
+      missions = ['취미미션 1', '취미미션 2'];
+    } else {
+      missions = ['교통미션 1', '교통미션 2', '교통미션 3'];
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('미션 추가'),
-          content: Text('$missionName을(를) 미션에 추가하시겠습니까?'),
+          title: Text('$missionName 미션 선택'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: missions.map((mission) {
+              return ListTile(
+                title: Text(mission),
+                onTap: () {
+                  // 미션 추가 로직 호출
+                  Provider.of<ChartProvider>(context, listen: false).addMission(mission);
+                  Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: Text('취소'),
-            ),
-            TextButton(
-              onPressed: () {
-                // 추가 로직 호출
-                Provider.of<ChartProvider>(context, listen: false)
-                    .addMission(missionName);
-                Navigator.of(context).pop();
-              },
-              child: Text('추가'),
+              child: Text('닫기'),
             ),
           ],
         );
