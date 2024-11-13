@@ -1,7 +1,12 @@
-allprojects {
+buildscript {
+    ext.kotlin_version = '1.7.10' // 호환 가능한 Kotlin 버전으로 변경
     repositories {
         google()
         mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:7.3.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
@@ -16,3 +21,4 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
