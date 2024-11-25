@@ -9,6 +9,7 @@ import 'providers/chart_provider.dart';
 
 void main() {
   runApp(
+
     ChangeNotifierProvider(
       create: (context) => ChartProvider(),
       child: MyApp(),
@@ -16,7 +17,10 @@ void main() {
   );
 }
 
+
+
 class MyApp extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
