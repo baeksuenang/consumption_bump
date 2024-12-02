@@ -1,8 +1,7 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:workmanager/workmanager.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -11,11 +10,11 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
   double? _homeLatitude;
   double? _homeLongitude;
-  bool _isWithinHomeZone = false; // 현재 위치 상태를 저장
+  String _currentStatus = '위치를 확인하려면 버튼을 누르세요.';
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
@@ -33,16 +32,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     const InitializationSettings initializationSettings =
     InitializationSettings(android: initializationSettingsAndroid);
 
-    flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onSelectNotification: (String? payload) async {
-        if (payload != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SettingsScreen()),
-          );
-        }
-      },
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
+
+  /// 알림 전송
+  Future<void> _showNotification(String message) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'home_channel',
+      'Home Notifications',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails notificationDetails =
+    NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      '알림',
+      message,
+      notificationDetails,
     );
   }
 
@@ -57,30 +66,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// 알림 전송
-  Future<void> _showNotification(String message) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'home_channel',
-      'Home Notifications',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const NotificationDetails notificationDetails =
-    NotificationDetails(android: androidDetails);
-
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      '알림',
-      message,
-      notificationDetails,
-    );
-  }
-
   /// 집 위치 저장
   Future<void> _saveHomeLocation(double latitude, double longitude) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('homeLatitude', latitude);
     await prefs.setDouble('homeLongitude', longitude);
+    setState(() {
+      _homeLatitude = latitude;
+      _homeLongitude = longitude;
+    });
   }
 
   /// 집 위치 로드
@@ -97,36 +91,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _requestLocationPermission();
     Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _homeLatitude = position.latitude;
-      _homeLongitude = position.longitude;
-    });
     await _saveHomeLocation(position.latitude, position.longitude);
-    _startBackgroundLocationCheck(); // 백그라운드 작업 시작
+    setState(() {
+      _currentStatus = '집 위치가 설정되었습니다.';
+    });
   }
 
   /// WorkManager 초기화
   void _initializeWorkManager() {
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-  }
-
-  /// 백그라운드 작업 예약
-  void _startBackgroundLocationCheck() {
-    Workmanager().registerPeriodicTask(
-      "1",
-      "backgroundLocationCheck",
-      frequency: const Duration(minutes: 15),
-      inputData: {
-        'homeLatitude': _homeLatitude.toString(),
-        'homeLongitude': _homeLongitude.toString(),
-      },
+    Workmanager().initialize(
+      _callbackDispatcher,
+      isInDebugMode: false, // 릴리스 환경에서는 항상 false
     );
   }
 
-  /// 백그라운드 콜백
-  static void callbackDispatcher() {
+  /// WorkManager에 작업 등록
+  void _startPeriodicLocationCheck() {
+    if (_homeLatitude != null && _homeLongitude != null) {
+      Workmanager().registerPeriodicTask(
+        'checkLocationTask',
+        'backgroundLocationCheck',
+        frequency: const Duration(minutes: 15), // 최소 15분 간격
+        inputData: {
+          'homeLatitude': _homeLatitude.toString(),
+          'homeLongitude': _homeLongitude.toString(),
+        },
+      );
+      setState(() {
+        _currentStatus = '주기적인 위치 확인 작업이 시작되었습니다.';
+      });
+    } else {
+      setState(() {
+        _currentStatus = '먼저 집 위치를 설정하세요.';
+      });
+    }
+  }
+
+  /// WorkManager 콜백
+  static void _callbackDispatcher() {
     Workmanager().executeTask((task, inputData) async {
       final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+      // 알림 초기화
       const AndroidInitializationSettings initializationSettingsAndroid =
       AndroidInitializationSettings('@mipmap/ic_launcher');
       const InitializationSettings initializationSettings =
@@ -147,13 +153,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           currentPosition.longitude,
         );
 
-        // 일정 거리 이상 벗어났다가 다시 돌아온 경우 알림
-        final prefs = await SharedPreferences.getInstance();
-        bool wasWithinHomeZone = prefs.getBool('isWithinHomeZone') ?? false;
-
-        if (distance < 10 && !wasWithinHomeZone) {
-          // 집에 돌아옴
-          prefs.setBool('isWithinHomeZone', true);
+        if (distance < 10) {
+          // 집에 도착했음을 알림
           const AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
             'home_channel',
@@ -167,12 +168,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           await flutterLocalNotificationsPlugin.show(
             0,
             '알림',
-            '집에 도착했습니다!',
+            '소비를 입력하세요!',
             notificationDetails,
           );
-        } else if (distance >= 10 && wasWithinHomeZone) {
-          // 집에서 멀어짐
-          prefs.setBool('isWithinHomeZone', false);
         }
       }
 
@@ -191,14 +189,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              _homeLatitude == null
-                  ? '집 위치가 설정되지 않았습니다.'
-                  : '집 위치: $_homeLatitude, $_homeLongitude',
+              _currentStatus,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _setHomeLocation,
               child: const Text('현재 위치를 집으로 설정'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _startPeriodicLocationCheck,
+              child: const Text('주기적 위치 확인 시작'),
             ),
           ],
         ),
