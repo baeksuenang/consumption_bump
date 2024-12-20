@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:charts_flutter/flutter.dart' as charts;
 import '../providers/chart_provider.dart';
+import '../widgets/checklist_popup.dart';
 
 class HomeScreen extends StatelessWidget {
   @override
@@ -67,7 +68,7 @@ class HomeScreen extends StatelessWidget {
                         changedListener: (charts.SelectionModel<String> model) {
                           if (model.hasDatumSelection) {
                             final selectedData = model.selectedDatum[0].datum;
-                            showMissionPopup(context, selectedData.label);
+                            showMissionTypeDialog(context, selectedData.label);
                           }
                         },
                       ),
@@ -97,161 +98,64 @@ class HomeScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '해결한 미션 수: ${chartProvider.completedMissionsCount}',
+                          '해결한 미션 수: ${chartProvider.completedDailyMissionsCount + chartProvider.completedWeeklyMissionsCount}',
                           style: TextStyle(fontSize: 16, color: Colors.black),
                         ),
                       ],
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                // Box 2
-                Container(
-                  width: double.infinity,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        spreadRadius: 1,
-                        blurRadius: 5,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Left: Daily Missions Display (with horizontal scrolling)
-                      Expanded(
-                        flex: 3,
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '주간 미션',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
-                              SizedBox(height: 8),
-                              Expanded(
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: Provider.of<ChartProvider>(context).dailyMissions.length,
-                                  itemBuilder: (context, index) {
-                                    final mission = Provider.of<ChartProvider>(context).dailyMissions[index];
-                                    return Container(
-                                      margin: EdgeInsets.only(right: 8.0),
-                                      padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green[100],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          mission,
-                                          style: TextStyle(fontSize: 14),
-                                          overflow: TextOverflow.ellipsis, // 긴 텍스트 처리
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      // Right: Settings Button
-                      Expanded(
-                        flex: 1,
-                        child: IconButton(
-                          icon: Icon(Icons.settings, color: Colors.green),
-                          onPressed: () {
-                            showDailyMissionDialog(context);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-
               ],
             ),
           ),
         ),
+
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (context) => ChecklistPopup(),
+          );
+        },
+        backgroundColor: Color(0xFF798645),
+        child: Icon(Icons.add), // 플러스 아이콘 추가
+      ),
+
     );
   }
-
-  void showDailyMissionDialog(BuildContext context) {
-    final chartProvider = Provider.of<ChartProvider>(context, listen: false);
-    final List<String> availableMissions = [
-      '일주일동안 배달음식 안 먹기',
-      '일주일동안 집에서 요리한 식사를 SNS나 메모장에 기록하기',
-      '옷장을 정리하여 필요한 옷과 불필요한 옷을 구분해보기',
-      '일주일간 7만보 달성하기',
-      '매일, 텀블러 들고다니기',
-      '필요한 물품 체크리스트 작성',
-      '소모품 자리 정리해두기'
-    ];
-
-    // 현재 선택된 미션을 로컬 상태로 유지
-    final selectedMissions = Set<String>.from(chartProvider.dailyMissions);
-
+  void showMissionTypeDialog(BuildContext context, String missionName) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return AlertDialog(
-              title: Text('주간 미션 설정'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: availableMissions.map((mission) {
-                  return CheckboxListTile(
-                    title: Text(mission),
-                    value: selectedMissions.contains(mission),
-                    onChanged: (bool? isSelected) {
-                      setState(() {
-                        if (isSelected == true) {
-                          selectedMissions.add(mission);
-                        } else {
-                          selectedMissions.remove(mission);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
+        return AlertDialog(
+          title: Text('$missionName 미션 종류 선택'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('주간 미션'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showWeeklyMissionDialog(context, missionName); // 주간 미션 팝업
+                },
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                  child: Text('취소'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    chartProvider.dailyMissions.clear();
-                    chartProvider.dailyMissions.addAll(selectedMissions);
-                    chartProvider.notifyListeners(); // 변경 사항을 반영
-                    Navigator.of(context).pop();
-                  },
-                  child: Text('저장'),
-                ),
-              ],
-            );
-          },
+              ListTile(
+                title: Text('일간 미션'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  showDailyMissionDialog(context , missionName); // 일간 미션 팝업
+                },
+              ),
+            ],
+          ),
         );
       },
     );
   }
 
-  void showMissionPopup(BuildContext context, String missionName) {
+
+  void showDailyMissionDialog(BuildContext context, String missionName) {
     List<String> missions;
     if (missionName == '식사') {
       missions = ['하루동안 물 750ml 마시기', '식사 후 남은 음식을 활용한 레시피 찾아보기', '도시락 싸기', '자주 남는 음식 분석하고, 리스트 만들기'];
@@ -265,6 +169,95 @@ class HomeScreen extends StatelessWidget {
       missions = ['입지 않은 옷 조합을 이용해 새로운 스타일 만들어보기', '필요한 물품 체크리스트 만들기', '구매할 물품 중고 플랫폼에 있는지 확인하기'];
     }
 
+    // 커스텀 미션을 추가할 임시 변수
+    TextEditingController customMissionController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              title: Text('$missionName 미션 선택'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. 사용자가 커스텀 미션을 추가할 수 있는 입력 필드와 추가 버튼
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: customMissionController,
+                            decoration: InputDecoration(
+                              hintText: '새로운 미션 입력',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            String newMission = customMissionController.text.trim();
+                            if (newMission.isNotEmpty) {
+                              setState(() {
+                                missions.add(newMission);
+                              });
+                              customMissionController.clear(); // 입력 필드 초기화
+                            }
+                          },
+                          child: Text('추가'),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+
+                    // 2. 미션 목록 출력
+                    ...missions.map((mission) {
+                      return ListTile(
+                        title: Text(mission),
+                        onTap: () {
+                          Provider.of<ChartProvider>(context, listen: false).addDailyMission(mission);
+                          Navigator.of(context).pop();
+                        },
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('닫기'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+
+  void showWeeklyMissionDialog(BuildContext context, String missionName) {
+    List<String> missions;
+    if (missionName == '식사') {
+      missions = ['이번 한 주 매일 아침 만들어먹기', '올바른 수면 습관을 통해 규칙적인 식사 하기','일주일간 금주 도전하기'];
+    } else if (missionName == '교통') {
+      missions = ['한시간 이내 거리는 무조건 공용자전거 이용하기','늦잠 자지 않고 제때 버스타기'];
+    } else if (missionName == '취미') {
+      missions = ['일주일간 인터넷 구매 없이 살아보기','일주일간 현금으로만 구매하기'];
+    } else if (missionName == '기타') {
+      missions = ['하루 동안 다회용품만 사용하기','소비 후 5분내에 기록하기'];
+    } else {
+      missions = ['이번 주는 원래 있던 옷으로 조합 만들기', '사고 싶은 옷이 있다면  인터넷과 오프라인 매장의 가격을 비교해보고 저렴하게 구입하기','물기 닦을 때 수건 재사용하기'];
+    }
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -276,7 +269,7 @@ class HomeScreen extends StatelessWidget {
               return ListTile(
                 title: Text(mission),
                 onTap: () {
-                  Provider.of<ChartProvider>(context, listen: false).addMission(mission);
+                  Provider.of<ChartProvider>(context, listen: false).addWeeklyMission(mission);
                   Navigator.of(context).pop();
                 },
               );

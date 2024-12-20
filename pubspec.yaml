@@ -35,7 +35,7 @@ dependencies:
   geolocator: ^9.0.2
   workmanager: ^0.5.0
   flutter_local_notifications: ^9.0.0
-  shared_preferences: ^2.0.6
+  shared_preferences: ^2.1.0
 
 
   # The following adds the Cupertino Icons font to your application.
@@ -61,6 +61,16 @@ flutter:
     - assets/images/4c.png
     - assets/images/5c.png
     - assets/images/6c.png
+    - assets/images/tutorial_1.png
+    - assets/images/tutorial_2.png
+    - assets/images/tutorial_3.png
+    - assets/images/tutorial_4.png
+    - assets/images/tutorial_5.png
+    - assets/images/tutorial_6.png
+    - assets/images/tutorial_7.png
+    - assets/images/tutorial_8.png
+    - assets/images/tutorial_9.png
+    - assets/images/tutorial_10.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

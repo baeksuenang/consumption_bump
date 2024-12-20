@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/mission_screen.dart';
-import 'screens/input_screen.dart';
 import 'screens/character_screen.dart'; // Import Character screen
-import 'screens/settings_screen.dart';  // Import Settings screen
+import 'screens/settings_screen.dart';
 import 'providers/chart_provider.dart';
 
 void main() {
@@ -40,7 +39,7 @@ class _MainScreenState extends State<MainScreen> {
   static List<Widget> _widgetOptions = <Widget>[
     HomeScreen(),
     CharacterScreen(),
-    InputScreen(),
+
     MissionScreen(),// Add Character screen
     SettingsScreen(),   // Add Settings screen
   ];
@@ -64,10 +63,6 @@ class _MainScreenState extends State<MainScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: '캐릭터',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.input),
-            label: '입력',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.list),

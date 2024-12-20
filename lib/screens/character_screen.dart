@@ -6,7 +6,8 @@ class CharacterScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completedMissionsCount =
-        Provider.of<ChartProvider>(context).completedMissionsCount;
+        Provider.of<ChartProvider>(context).completedDailyMissionsCount
+      + Provider.of<ChartProvider>(context).completedWeeklyMissionsCount;
 
     // 이미지 파일 이름을 결정하는 함수
     String getImageForMissionCount(int count) {

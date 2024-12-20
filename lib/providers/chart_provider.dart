@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ChartProvider with ChangeNotifier {
+  List<String> completedMissions = [];
+  // 선택된 수량과 누적 수량
   Map<String, int> selectedQuantities = {
     "취미": 0,
     "식사": 0,
@@ -18,11 +20,15 @@ class ChartProvider with ChangeNotifier {
     "기타": 0
   };
 
-  List<String> missions = [];
-  int completedMissionsCount = 0; // 완료된 미션 횟수 추가
+  // 미션 리스트
+  List<String> dailyMissions = []; // 일간 미션
+  List<String> weeklyMissions = []; // 주간 미션
+  int completedDailyMissionsCount = 0; // 완료된 일간 미션 수
+  int completedWeeklyMissionsCount = 0; // 완료된 주간 미션 수
 
+  // 생성자에서 데이터 로드
   ChartProvider() {
-    _loadData(); // 생성자에서 데이터 로드
+    _loadData();
   }
 
   // 선택된 수량 업데이트
@@ -58,60 +64,104 @@ class ChartProvider with ChangeNotifier {
     return accumulatedQuantities.map((option, quantity) => MapEntry(option, quantity / total));
   }
 
-  void addMission(String missionName) {
-    if (!missions.contains(missionName)) {
-      missions.add(missionName);
-      _saveData(); // 저장
-      notifyListeners();
-    }
-  }
-
-  void removeMission(String missionName) {
-    missions.remove(missionName);
-    completedMissionsCount++; // 미션 완료 횟수 증가
-    _saveData(); // 저장
-    notifyListeners();
-  }
-
-  // 일일 미션 관련 메서드
-  final List<String> _dailyMissions = [];
-
-  List<String> get dailyMissions => _dailyMissions;
-
+  // 일간 미션 추가/삭제
   void addDailyMission(String mission) {
-    if (!_dailyMissions.contains(mission)) {
-      _dailyMissions.add(mission);
+    if (!dailyMissions.contains(mission)) {
+      dailyMissions.add(mission);
       _saveData(); // 저장
       notifyListeners();
     }
   }
 
   void removeDailyMission(String mission) {
-    _dailyMissions.remove(mission);
+    dailyMissions.remove(mission);
+    completedDailyMissionsCount++; // 일간 미션 완료 수 증가
+    completedMissions.add(mission);
     _saveData(); // 저장
+    notifyListeners();
+  }
+
+  // 주간 미션 추가/삭제
+  void addWeeklyMission(String mission) {
+    if (!weeklyMissions.contains(mission)) {
+      weeklyMissions.add(mission);
+      weeklyMissionsProgress[mission] = 0; // 진행도 초기화
+      _saveData();
+      notifyListeners();
+    }
+  }
+
+  void removeWeeklyMission(String mission) {
+    weeklyMissions.remove(mission);
+    weeklyMissionsProgress.remove(mission);
+    completedMissions.add(mission);
+    _saveData();
     notifyListeners();
   }
 
   // 데이터 저장
   Future<void> _saveData() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // 수량 저장
     accumulatedQuantities.forEach((key, value) {
       prefs.setInt('accumulated_$key', value);
     });
-    prefs.setInt('completedMissionsCount', completedMissionsCount);
-    prefs.setStringList('missions', missions);
-    prefs.setStringList('dailyMissions', _dailyMissions);
+
+    // 완료된 미션 수 저장
+    prefs.setInt('completedDailyMissionsCount', completedDailyMissionsCount);
+    prefs.setInt('completedWeeklyMissionsCount', completedWeeklyMissionsCount);
+
+    prefs.setStringList('completedMissions', completedMissions);
+
+    // 미션 리스트 저장
+    prefs.setStringList('dailyMissions', dailyMissions);
+    prefs.setStringList(
+      'weeklyMissionsProgress',
+      weeklyMissions.map((mission) => '${mission}:${weeklyMissionsProgress[mission]}').toList(),
+    );
+
+    prefs.setStringList('weeklyMissions', weeklyMissions);
+
   }
 
   // 데이터 로드
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // 수량 로드
     accumulatedQuantities.forEach((key, _) {
       accumulatedQuantities[key] = prefs.getInt('accumulated_$key') ?? 0;
     });
-    completedMissionsCount = prefs.getInt('completedMissionsCount') ?? 0;
-    missions = prefs.getStringList('missions') ?? [];
-    _dailyMissions.addAll(prefs.getStringList('dailyMissions') ?? []);
+
+    // 완료된 미션 수 로드
+    completedDailyMissionsCount = prefs.getInt('completedDailyMissionsCount') ?? 0;
+    completedWeeklyMissionsCount = prefs.getInt('completedWeeklyMissionsCount') ?? 0;
+
+    completedMissions = prefs.getStringList('completedMissions') ?? [];
+
+
+    // 미션 리스트 로드
+    dailyMissions = prefs.getStringList('dailyMissions') ?? [];
+
+    weeklyMissions = prefs.getStringList('weeklyMissions') ?? [];
+    final progressList = prefs.getStringList('weeklyMissionsProgress') ?? [];
+
+    // 진행 상태 로드
+    weeklyMissionsProgress = {
+      for (var progress in progressList)
+        progress.split(':')[0]: int.parse(progress.split(':')[1])
+    };
+
     notifyListeners();
+  }
+
+  Map<String, int> weeklyMissionsProgress = {}; // 미션별 진행 상태
+  void updateWeeklyMissionProgress(String mission, int progress) {
+    if (weeklyMissionsProgress.containsKey(mission)) {
+      weeklyMissionsProgress[mission] = progress;
+      _saveData();
+      notifyListeners(); // 상태 변경 후 UI 업데이트
+    }
   }
 }

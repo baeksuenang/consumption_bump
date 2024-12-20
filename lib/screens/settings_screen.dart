@@ -1,9 +1,8 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:workmanager/workmanager.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 
 class SettingsScreen extends StatefulWidget {
   @override
@@ -11,196 +10,191 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-  FlutterLocalNotificationsPlugin();
-  double? _homeLatitude;
-  double? _homeLongitude;
-  bool _isWithinHomeZone = false; // 현재 위치 상태를 저장
+  TimeOfDay? _selectedTime;
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
     _initializeNotifications();
-    _loadHomeLocation();
-    _initializeWorkManager();
+    _loadSavedTime(); // 저장된 시간 불러오기
   }
 
-  /// 알림 초기화
-  void _initializeNotifications() {
-    const AndroidInitializationSettings initializationSettingsAndroid =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+  // 알림 초기화
+  void _initializeNotifications() async {
+    tz.initializeTimeZones(); // 타임존 초기화
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('app_icon');
+    const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
 
-    const InitializationSettings initializationSettings =
-    InitializationSettings(android: initializationSettingsAndroid);
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
 
-    flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onSelectNotification: (String? payload) async {
-        if (payload != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SettingsScreen()),
-          );
-        }
-      },
+  // 저장된 알람 시간 불러오기
+  Future<void> _loadSavedTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hour = prefs.getInt('alarm_hour');
+    final minute = prefs.getInt('alarm_minute');
+
+    if (hour != null && minute != null) {
+      setState(() {
+        _selectedTime = TimeOfDay(hour: hour, minute: minute);
+      });
+      _scheduleNotification(_selectedTime!); // 저장된 시간으로 알림 예약
+    }
+  }
+
+  // 알람 시간 저장
+  Future<void> _saveTime(TimeOfDay time) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('alarm_hour', time.hour);
+    await prefs.setInt('alarm_minute', time.minute);
+  }
+
+  // 알림 예약
+  void _scheduleNotification(TimeOfDay time) async {
+    final now = DateTime.now();
+    final scheduleTime = tz.TZDateTime.from(
+      DateTime(now.year, now.month, now.day, time.hour, time.minute),
+      tz.local,
     );
-  }
 
-  /// 권한 요청
-  Future<void> _requestLocationPermission() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    if (scheduleTime.isBefore(now)) {
+      scheduleTime.add(Duration(days: 1));
     }
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception('위치 권한이 영구적으로 거부되었습니다.');
-    }
-  }
 
-  /// 알림 전송
-  Future<void> _showNotification(String message) async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'home_channel',
-      'Home Notifications',
+      'daily_reminder',
+      'Daily Reminder',
+      channelDescription: 'Sends daily reminder notifications',
       importance: Importance.high,
       priority: Priority.high,
     );
-    const NotificationDetails notificationDetails =
-    NotificationDetails(android: androidDetails);
 
-    await flutterLocalNotificationsPlugin.show(
+    const NotificationDetails notificationDetails = NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.zonedSchedule(
       0,
-      '알림',
-      message,
+      '미션 알림',
+      '설정된 시간에 푸쉬 알람을 받습니다.',
+      scheduleTime,
       notificationDetails,
+      androidAllowWhileIdle: true,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
-  /// 집 위치 저장
-  Future<void> _saveHomeLocation(double latitude, double longitude) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('homeLatitude', latitude);
-    await prefs.setDouble('homeLongitude', longitude);
-  }
-
-  /// 집 위치 로드
-  Future<void> _loadHomeLocation() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _homeLatitude = prefs.getDouble('homeLatitude');
-      _homeLongitude = prefs.getDouble('homeLongitude');
-    });
-  }
-
-  /// 현재 위치를 집으로 설정
-  Future<void> _setHomeLocation() async {
-    await _requestLocationPermission();
-    Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high);
-    setState(() {
-      _homeLatitude = position.latitude;
-      _homeLongitude = position.longitude;
-    });
-    await _saveHomeLocation(position.latitude, position.longitude);
-    _startBackgroundLocationCheck(); // 백그라운드 작업 시작
-  }
-
-  /// WorkManager 초기화
-  void _initializeWorkManager() {
-    Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-  }
-
-  /// 백그라운드 작업 예약
-  void _startBackgroundLocationCheck() {
-    Workmanager().registerPeriodicTask(
-      "1",
-      "backgroundLocationCheck",
-      frequency: const Duration(minutes: 15),
-      inputData: {
-        'homeLatitude': _homeLatitude.toString(),
-        'homeLongitude': _homeLongitude.toString(),
-      },
+  // 시간 선택
+  Future<void> _pickTime() async {
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
     );
+
+    if (pickedTime != null) {
+      setState(() {
+        _selectedTime = pickedTime;
+      });
+
+      _saveTime(pickedTime); // 선택한 시간 저장
+      _scheduleNotification(pickedTime); // 알림 예약
+    }
   }
 
-  /// 백그라운드 콜백
-  static void callbackDispatcher() {
-    Workmanager().executeTask((task, inputData) async {
-      final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-      const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-      const InitializationSettings initializationSettings =
-      InitializationSettings(android: initializationSettingsAndroid);
-      flutterLocalNotificationsPlugin.initialize(initializationSettings);
-
-      // 저장된 집 위치
-      double? homeLat = double.tryParse(inputData?['homeLatitude'] ?? '');
-      double? homeLon = double.tryParse(inputData?['homeLongitude'] ?? '');
-
-      if (homeLat != null && homeLon != null) {
-        Position currentPosition = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.high);
-        double distance = Geolocator.distanceBetween(
-          homeLat,
-          homeLon,
-          currentPosition.latitude,
-          currentPosition.longitude,
-        );
-
-        // 일정 거리 이상 벗어났다가 다시 돌아온 경우 알림
-        final prefs = await SharedPreferences.getInstance();
-        bool wasWithinHomeZone = prefs.getBool('isWithinHomeZone') ?? false;
-
-        if (distance < 10 && !wasWithinHomeZone) {
-          // 집에 돌아옴
-          prefs.setBool('isWithinHomeZone', true);
-          const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
-            'home_channel',
-            'Home Notifications',
-            importance: Importance.high,
-            priority: Priority.high,
-          );
-          const NotificationDetails notificationDetails =
-          NotificationDetails(android: androidDetails);
-
-          await flutterLocalNotificationsPlugin.show(
-            0,
-            '알림',
-            '집에 도착했습니다!',
-            notificationDetails,
-          );
-        } else if (distance >= 10 && wasWithinHomeZone) {
-          // 집에서 멀어짐
-          prefs.setBool('isWithinHomeZone', false);
-        }
-      }
-
-      return Future.value(true);
-    });
+  // **튜토리얼 시작 함수**
+  void _startTutorial() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => TutorialScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('설정'),
+        title: Text('설정'),
+        backgroundColor: Color(0xFF798645),
       ),
-      body: Center(
+      backgroundColor: Color(0xFFFEFAE0),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _homeLatitude == null
-                  ? '집 위치가 설정되지 않았습니다.'
-                  : '집 위치: $_homeLatitude, $_homeLongitude',
+              '푸쉬 알람 시간 설정',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _setHomeLocation,
-              child: const Text('현재 위치를 집으로 설정'),
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _selectedTime != null
+                      ? '설정된 시간: ${_selectedTime!.format(context)}'
+                      : '시간이 설정되지 않았습니다.',
+                  style: TextStyle(fontSize: 16),
+                ),
+                ElevatedButton(
+                  onPressed: _pickTime,
+                  child: Text('시간 설정'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF798645),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 20),
+            Center(
+              child: ElevatedButton(
+                onPressed: _startTutorial,
+                child: Text('튜토리얼 시작'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF798645),
+                ),
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class TutorialScreen extends StatefulWidget {
+  @override
+  _TutorialScreenState createState() => _TutorialScreenState();
+}
+
+class _TutorialScreenState extends State<TutorialScreen> {
+  int currentIndex = 0;
+
+  final List<String> tutorialImages = List.generate(
+    10,
+        (index) => 'assets/images/tutorial_${index + 1}.png',
+  );
+
+  void _nextImage() {
+    setState(() {
+      if (currentIndex < tutorialImages.length - 1) {
+        currentIndex++;
+      } else {
+        Navigator.pop(context); // 마지막 이미지에 도달하면 튜토리얼 종료
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: _nextImage,
+        child: Center(
+          child: Image.asset(
+            tutorialImages[currentIndex],
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     );
